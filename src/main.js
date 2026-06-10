@@ -3,8 +3,8 @@
   const SAVE_SLOT_PREFIX = "beagle-darwin-note-save-v2-slot-";
   const SAVE_SLOT_COUNT = 5;
   const GALLERY_KEY = "beagle-darwin-endings-v1";
-  const GEMINI_MODEL = "gemini-2.5-flash";
-  const GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-pro"];
+  const GEMINI_MODEL = "gemini-2.5-flash-lite";
+  const GEMINI_FALLBACK_MODELS = [];
   const AGENT_VERDICT_DELAY_MS = 3200;
   const CHALLENGE_INTRO_MS = 2200;
   const CHALLENGE_COMPLETE_MS = 2500;

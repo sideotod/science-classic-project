@@ -1,4 +1,4 @@
-const DEFAULT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"];
+const DEFAULT_MODEL = "gemini-2.5-flash-lite";
 
 function getRequestBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
@@ -8,13 +8,9 @@ function getRequestBody(req) {
   return {};
 }
 
-function uniqueModels(models) {
+function selectModel(models) {
   const requested = Array.isArray(models) ? models : [];
-  return [...new Set([...requested, ...DEFAULT_MODELS].map((model) => String(model || "").trim()).filter(Boolean))];
-}
-
-function shouldTryFallbackModel(status, message) {
-  return status === 503 || status === 429 || status === 404 || /high demand|overloaded|temporar|try again|not found/i.test(message || "");
+  return requested.map((model) => String(model || "").trim()).find(Boolean) || DEFAULT_MODEL;
 }
 
 async function requestGeminiModel(model, apiKey, body) {
@@ -32,7 +28,6 @@ async function requestGeminiModel(model, apiKey, body) {
     const message = data.error?.message || `AI API request failed. (${response.status})`;
     const error = new Error(message);
     error.status = response.status;
-    error.retryableModel = shouldTryFallbackModel(response.status, message);
     throw error;
   }
 
@@ -71,24 +66,18 @@ module.exports = async function handler(req, res) {
     return sendJson(res, 400, { error: "AI 요청 본문이 올바르지 않습니다." });
   }
 
-  let lastError = null;
-  for (const model of uniqueModels(payload.models)) {
-    try {
-      const text = await requestGeminiModel(model, apiKey, body);
-      return sendJson(res, 200, { model, text });
-    } catch (error) {
-      lastError = error;
-      if (!error.retryableModel) break;
-    }
+  const model = selectModel(payload.models);
+  try {
+    const text = await requestGeminiModel(model, apiKey, body);
+    return sendJson(res, 200, { model, text });
+  } catch (error) {
+    const status = error.status || 500;
+    const message =
+      status === 429
+        ? "AI 요청 한도에 도달했습니다. 잠시 후 다시 시도해 주세요."
+        : status === 503
+          ? "AI 모델이 일시적으로 혼잡합니다. 잠시 후 다시 시도해 주세요."
+          : error.message || "AI 응답을 가져오지 못했습니다.";
+    return sendJson(res, status, { error: message, model });
   }
-
-  if (lastError?.retryableModel) {
-    return sendJson(res, 503, {
-      error: "AI 모델 호출이 실패했습니다. 수요가 높거나 대체 모델을 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
-    });
-  }
-
-  return sendJson(res, lastError?.status || 500, {
-    error: lastError?.message || "AI 응답을 가져오지 못했습니다.",
-  });
 };
