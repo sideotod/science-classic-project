@@ -3,10 +3,8 @@
   const SAVE_SLOT_PREFIX = "beagle-darwin-note-save-v2-slot-";
   const SAVE_SLOT_COUNT = 5;
   const GALLERY_KEY = "beagle-darwin-endings-v1";
-  const GEMINI_KEY_STORAGE = "beagle-gemini-api-key-v1";
   const GEMINI_MODEL = "gemini-2.5-flash";
   const GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-pro"];
-  const GEMINI_API_KEY = "";
   const AGENT_VERDICT_DELAY_MS = 3200;
   const CHALLENGE_INTRO_MS = 2200;
   const CHALLENGE_COMPLETE_MS = 2500;
@@ -2098,28 +2096,6 @@
     return Boolean(agentSceneConfigs[sceneId]);
   }
 
-  function loadGeminiApiKey() {
-    const embeddedKey = String(GEMINI_API_KEY || "").trim();
-    if (embeddedKey) return embeddedKey;
-    try {
-      return localStorage.getItem(GEMINI_KEY_STORAGE) || "";
-    } catch {
-      return "";
-    }
-  }
-
-  function saveGeminiApiKey(apiKey) {
-    try {
-      if (apiKey) {
-        localStorage.setItem(GEMINI_KEY_STORAGE, apiKey);
-      } else {
-        localStorage.removeItem(GEMINI_KEY_STORAGE);
-      }
-    } catch {
-      // localStorage can be unavailable in strict browser privacy modes.
-    }
-  }
-
   function ensureAgentChat(sceneId) {
     const config = agentSceneConfigs[sceneId];
     if (!config) return null;
@@ -2291,10 +2267,6 @@ ${history}
     };
   }
 
-  function shouldTryFallbackModel(status, message) {
-    return status === 503 || status === 429 || status === 404 || /high demand|overloaded|temporar|try again|not found/i.test(message || "");
-  }
-
   function getGeminiModels() {
     return [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(Boolean))];
   }
@@ -2326,54 +2298,36 @@ ${history}
     };
   }
 
-  async function requestGeminiModel(model, apiKey, body) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+  async function requestGeminiProxy(body) {
+    const response = await fetch("/api/gemini", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        models: getGeminiModels(),
+        body,
+      }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const message = data.error?.message || `AI API 요청이 실패했습니다. (${response.status})`;
+      const message = data.error || `AI API 요청이 실패했습니다. (${response.status})`;
       const error = new Error(message);
       error.status = response.status;
-      error.retryableModel = shouldTryFallbackModel(response.status, message);
       throw error;
     }
 
-    const text = (data.candidates?.[0]?.content?.parts || [])
-      .map((part) => part.text || "")
-      .join("")
-      .trim();
-    return text;
+    return {
+      model: data.model || GEMINI_MODEL,
+      text: String(data.text || "").trim(),
+    };
   }
 
   async function requestGeminiAgentReply(sceneId, chat) {
-    const apiKey = loadGeminiApiKey();
-    if (!apiKey) {
-      throw new Error("AI API 키를 먼저 입력해 주세요.");
-    }
-
     const body = buildGeminiRequestBody(sceneId, chat);
-    let lastError = null;
-    for (const model of getGeminiModels()) {
-      try {
-        const text = await requestGeminiModel(model, apiKey, body);
-        return { ...normalizeAgentResult(sceneId, parseGeminiJson(text), chat.score), model };
-      } catch (error) {
-        lastError = error;
-        if (!error.retryableModel) break;
-      }
-    }
-
-    if (lastError?.retryableModel) {
-      throw new Error("AI 모델 호출이 실패했습니다. 수요가 높거나 대체 모델을 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.");
-    }
-    throw lastError || new Error("AI 응답을 가져오지 못했습니다.");
+    const { text, model } = await requestGeminiProxy(body);
+    return { ...normalizeAgentResult(sceneId, parseGeminiJson(text), chat.score), model };
   }
 
   async function handleAgentChatSubmit(sceneId) {
@@ -3235,8 +3189,6 @@ ${history}
   function renderAgentChat(scene) {
     const config = agentSceneConfigs[scene.id];
     const chat = ensureAgentChat(scene.id);
-    const apiKey = loadGeminiApiKey();
-    const embeddedApiKey = Boolean(String(GEMINI_API_KEY || "").trim());
     const draft = state.agentDrafts?.[scene.id] || "";
     const canShowLetter = scene.id === "shrewsbury-family" && DATA.wedgwoodLetter;
     const letterLines = DATA.wedgwoodLetter?.full || [];
@@ -3257,7 +3209,6 @@ ${history}
             <h2>${escapeHtml(config.targetLabel)}와 대화하기</h2>
             ${canShowLetter ? `<button type="button" class="agent-key-button letter-toggle-inline" data-action="toggle-letter">${state.showLetter ? "편지 닫기" : "편지 보기"}</button>` : ""}
           </div>
-          ${apiKey && !embeddedApiKey ? `<button type="button" class="agent-key-button" data-action="clear-gemini-key">키 재설정</button>` : ""}
           <div class="agent-score" aria-label="호감도 ${chat.score}점">
             <b>호감도</b>
             <span>${chat.score}</span>
@@ -3283,17 +3234,6 @@ ${history}
             : ""
         }
 
-        ${
-          apiKey
-            ? ""
-            : `
-              <div class="gemini-key-box">
-                <input type="password" data-gemini-key placeholder="AI API key">
-                <button type="button" data-action="save-gemini-key">키 저장</button>
-              </div>
-            `
-        }
-
         <div class="agent-log">
           ${chat.messages
             .map(
@@ -3316,9 +3256,9 @@ ${history}
             data-scene="${escapeHtml(scene.id)}"
             placeholder="${escapeHtml(config.targetLabel)}에게 어떻게 말할까?"
             enterkeyhint="send"
-            ${chat.pending || chat.locked || !apiKey ? "disabled" : ""}
+            ${chat.pending || chat.locked ? "disabled" : ""}
           >${escapeHtml(draft)}</textarea>
-          <button type="submit" ${chat.pending || chat.locked || !apiKey ? "disabled" : ""}>전송</button>
+          <button type="submit" ${chat.pending || chat.locked ? "disabled" : ""}>전송</button>
         </form>
       </section>
     `;
@@ -3668,16 +3608,6 @@ ${history}
           state.noteTab = button.dataset.tab || "specimens";
           render();
         }
-        return;
-      case "save-gemini-key": {
-        const keyInput = app.querySelector("[data-gemini-key]");
-        saveGeminiApiKey(String(keyInput?.value || "").trim());
-        render();
-        return;
-      }
-      case "clear-gemini-key":
-        saveGeminiApiKey("");
-        render();
         return;
       case "choice":
         if (state) handleChoice(button.dataset.choice);
