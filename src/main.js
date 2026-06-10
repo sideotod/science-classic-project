@@ -3,7 +3,8 @@
   const SAVE_SLOT_PREFIX = "beagle-darwin-note-save-v2-slot-";
   const SAVE_SLOT_COUNT = 5;
   const GALLERY_KEY = "beagle-darwin-endings-v1";
-  const GEMINI_MODEL = "gemini-2.5-flash-lite";
+  const GAME_SESSION_STORAGE = "beagle-game-session-id-v1";
+  const GEMINI_MODEL = "gemini-2.0-flash-lite";
   const GEMINI_FALLBACK_MODELS = [];
   const AGENT_VERDICT_DELAY_MS = 3200;
   const CHALLENGE_INTRO_MS = 2200;
@@ -213,7 +214,7 @@
       targetName: "로버트 다윈",
       targetLabel: "아버지",
       playerLabel: "찰스",
-      maxTurns: 8,
+      maxTurns: 3,
       nextScene: "fitzroy-interview",
       badEndingId: "familyFailure",
       challengeTitle: "아버지의 허락을 받자",
@@ -229,7 +230,7 @@
       targetName: "로버트 피츠로이",
       targetLabel: "선장",
       playerLabel: "다윈",
-      maxTurns: 8,
+      maxTurns: 3,
       nextScene: "brazil",
       badEndingId: "noseReject",
       challengeTitle: "관상학을 사랑하는 남자",
@@ -2405,6 +2406,19 @@ ${history}
     return [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(Boolean))];
   }
 
+  function getGameSessionId() {
+    try {
+      let sessionId = sessionStorage.getItem(GAME_SESSION_STORAGE);
+      if (!sessionId) {
+        sessionId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        sessionStorage.setItem(GAME_SESSION_STORAGE, sessionId);
+      }
+      return sessionId;
+    } catch {
+      return "session-unavailable";
+    }
+  }
+
   function buildGeminiRequestBody(sceneId, chat) {
     return {
       contents: [
@@ -2437,6 +2451,7 @@ ${history}
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Game-Session": getGameSessionId(),
       },
       body: JSON.stringify({
         models: getGeminiModels(),

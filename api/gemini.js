@@ -1,4 +1,6 @@
-const DEFAULT_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_MODEL = "gemini-2.0-flash-lite";
+const MIN_REQUEST_INTERVAL_MS = 6000;
+const lastRequestAtByClient = new Map();
 
 function getRequestBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
@@ -43,6 +45,21 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function getClientId(req) {
+  const sessionId = String(req.headers["x-game-session"] || "").trim();
+  if (/^[a-zA-Z0-9._:-]{8,80}$/.test(sessionId)) return `session:${sessionId}`;
+  const forwardedFor = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwardedFor || String(req.headers["x-real-ip"] || req.socket?.remoteAddress || "unknown");
+}
+
+function pruneClientRateLimit(now) {
+  for (const [clientId, lastRequestAt] of lastRequestAtByClient.entries()) {
+    if (now - lastRequestAt > 60 * 1000) {
+      lastRequestAtByClient.delete(clientId);
+    }
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -53,6 +70,17 @@ module.exports = async function handler(req, res) {
   if (!apiKey) {
     return sendJson(res, 500, { error: "GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다." });
   }
+
+  const now = Date.now();
+  const clientId = getClientId(req);
+  const lastRequestAt = lastRequestAtByClient.get(clientId) || 0;
+  const waitMs = MIN_REQUEST_INTERVAL_MS - (now - lastRequestAt);
+  if (waitMs > 0) {
+    res.setHeader("Retry-After", String(Math.ceil(waitMs / 1000)));
+    return sendJson(res, 429, { error: `AI 응답은 ${Math.ceil(waitMs / 1000)}초 후 다시 요청할 수 있습니다.` });
+  }
+  lastRequestAtByClient.set(clientId, now);
+  pruneClientRateLimit(now);
 
   let payload;
   try {
