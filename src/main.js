@@ -17,6 +17,8 @@
   const START_SLOT_ANIMATION_MS = 260;
   const START_BGM_DUCK_MS = 320;
   const START_WHOOSH_DELAY_MS = 130;
+  const START_PRELOAD_MIN_MS = 1600;
+  const START_PRELOAD_MAX_MS = 4200;
   const BGM_VOLUME = 0.42;
   const BGM_FADE_MS = 650;
   const FITZROY_TYPO_LINE = "말도 제대로 못 하는데 무슨 항해를 버티겠어.";
@@ -50,6 +52,7 @@
   let introTimer = null;
   let effectTimer = null;
   let loadingTimer = null;
+  let startupPreloadToken = 0;
   let agentTransitionTimer = null;
   let challengeCompleteTimer = null;
   let challengeExitSoundTimer = null;
@@ -63,15 +66,19 @@
   let bgmAudio = null;
   let currentBgmKey = "";
   let bgmUnlocked = false;
+  let startupLoadingProgress = 0;
+  let startupLoadingStatus = "게임 시작 준비 중...";
   let currentBackgroundImage = "";
   let currentCharacterSceneId = "";
   let currentCharacterLayoutKey = "";
   let introAudioContext = null;
   let introSoundEnabled = false;
   const imageCache = new Map();
+  const audioCache = new Map();
   let viewportLayoutFrame = 0;
 
   const INITIAL_PRELOAD_IMAGE_KEYS = ["startHarbor", "harborStudy", "voyageLoading"];
+  const START_PRELOAD_BGM_KEYS = ["harborIntro", "campus", "fatherTalk", "fitzroyTalk", "voyage", "typhoon", "ending"];
 
   function clampNumber(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -563,19 +570,68 @@
     );
   }
 
+  function wait(ms) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
   function preloadImage(src, priority = "auto") {
-    if (!src || imageCache.has(src) || typeof Image === "undefined") return;
+    if (!src || typeof Image === "undefined") return Promise.resolve(false);
+    const cached = imageCache.get(src);
+    if (cached) {
+      if (cached.complete && cached.naturalWidth > 0) return Promise.resolve(true);
+      return cached._preloadPromise || Promise.resolve(true);
+    }
+
     const image = new Image();
     image.decoding = "async";
     image.fetchPriority = priority;
+    image._preloadPromise = new Promise((resolve) => {
+      image.onload = () => resolve(true);
+      image.onerror = () => resolve(false);
+    });
     image.src = src;
     imageCache.set(src, image);
-    image.decode?.().catch(() => {});
+    image.decode?.().then(() => true).catch(() => false);
+    return image._preloadPromise;
   }
 
   function preloadImages() {
     const initialSources = INITIAL_PRELOAD_IMAGE_KEYS.map((key) => DATA.images?.[key]).filter(Boolean);
     initialSources.forEach((src) => preloadImage(src, "high"));
+  }
+
+  function preloadBgm(key) {
+    if (TEST_AUDIO_MUTED) return Promise.resolve(false);
+    const src = DATA.bgm?.[key];
+    if (!src || typeof Audio === "undefined") return Promise.resolve(false);
+    const cached = audioCache.get(src);
+    if (cached) return Promise.resolve(true);
+
+    const audio = new Audio(src);
+    audio.preload = "auto";
+    audio.volume = 0;
+    audioCache.set(src, audio);
+
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
+        audio.removeEventListener("canplaythrough", handleReady);
+        audio.removeEventListener("loadeddata", handleReady);
+        audio.removeEventListener("error", handleError);
+        resolve(ok);
+      };
+      const handleReady = () => finish(true);
+      const handleError = () => finish(false);
+      audio.addEventListener("canplaythrough", handleReady, { once: true });
+      audio.addEventListener("loadeddata", handleReady, { once: true });
+      audio.addEventListener("error", handleError, { once: true });
+      setTimeout(() => finish(audio.readyState >= 2), 2200);
+      audio.load();
+    });
   }
 
   function preloadSceneAssets(scene) {
@@ -1342,7 +1398,8 @@
       return;
     }
 
-    const audio = new Audio(src);
+    const audio = audioCache.get(src) || new Audio(src);
+    audioCache.delete(src);
     audio.loop = true;
     audio.volume = 0;
     bgmAudio = audio;
@@ -1589,6 +1646,79 @@
       addNotes(scene.onEnter?.addNotes);
     }
     preloadSceneAssets(scene);
+  }
+
+  function getStartupPreloadImageSources() {
+    const values = Object.values(DATA.images || {});
+    return [...new Set(values.filter((src) => /\.(jpe?g|png|webp|avif)$/i.test(src)))];
+  }
+
+  function updateStartupLoadingStatus(completed, total) {
+    const progress = total ? completed / total : 0;
+    startupLoadingProgress = Math.max(0.08, Math.min(1, progress));
+    startupLoadingStatus = progress >= 0.85
+      ? "항해 기록을 정리하고 있습니다."
+      : progress >= 0.45
+        ? "이미지와 음악을 불러오고 있습니다."
+        : "게임 시작 준비 중...";
+    if (view === "startup-loading") render();
+  }
+
+  async function preloadStartupAssets(token) {
+    const startedAt = Date.now();
+    const allImageSources = getStartupPreloadImageSources();
+    const initialSources = INITIAL_PRELOAD_IMAGE_KEYS.map((key) => DATA.images?.[key]).filter(Boolean);
+    const criticalSources = [...new Set(initialSources)];
+    const secondarySources = allImageSources.filter((src) => !criticalSources.includes(src));
+    const total = criticalSources.length + secondarySources.length + START_PRELOAD_BGM_KEYS.length;
+    let completed = 0;
+
+    const track = (promise) =>
+      Promise.resolve(promise).finally(() => {
+        completed += 1;
+        if (token === startupPreloadToken) updateStartupLoadingStatus(completed, total);
+      });
+
+    updateStartupLoadingStatus(0, total);
+    await Promise.allSettled(criticalSources.map((src) => track(preloadImage(src, "high"))));
+    if (token !== startupPreloadToken) return;
+
+    const secondaryTasks = [
+      ...secondarySources.map((src) => track(preloadImage(src))),
+      ...START_PRELOAD_BGM_KEYS.map((key) => track(preloadBgm(key))),
+    ];
+    const remainingBudget = Math.max(0, START_PRELOAD_MAX_MS - (Date.now() - startedAt));
+    await Promise.race([Promise.allSettled(secondaryTasks), wait(remainingBudget)]);
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < START_PRELOAD_MIN_MS) {
+      await wait(START_PRELOAD_MIN_MS - elapsed);
+    }
+  }
+
+  function beginStartupLoading(callback = () => startNewRun()) {
+    clearStartTransitionTimer();
+    clearIntroTimer();
+    clearTimedChoiceTimers();
+    clearLetterTimer();
+    clearChallengeCompleteTimer();
+    if (loadingTimer) {
+      clearTimeout(loadingTimer);
+      loadingTimer = null;
+    }
+    startupPreloadToken += 1;
+    const token = startupPreloadToken;
+    startupLoadingProgress = 0.08;
+    startupLoadingStatus = "게임 시작 준비 중...";
+    state = null;
+    view = "startup-loading";
+    render();
+
+    preloadStartupAssets(token).finally(() => {
+      if (token !== startupPreloadToken || view !== "startup-loading") return;
+      startupLoadingProgress = 1;
+      callback();
+    });
   }
 
   function startNewRun(skipIntro = false) {
@@ -3358,9 +3488,31 @@ ${history}
     `;
   }
 
+  function renderStartupLoading() {
+    const loadingImage = DATA.images.voyageLoading || DATA.images.startHarbor || DATA.images.harborStudy;
+    const progress = Math.max(8, Math.min(100, Math.round(startupLoadingProgress * 100)));
+    app.innerHTML = `
+      <main class="loading-screen startup-loading" style="--loading-duration: ${START_PRELOAD_MAX_MS}ms; --loading-progress: ${progress}%">
+        <img src="${loadingImage}" alt="바다 위 비글호">
+        <div class="loading-scrim"></div>
+        <section class="loading-card">
+          <p class="eyebrow">출항 준비</p>
+          <h1>게임 시작 준비 중...</h1>
+          <p>${escapeHtml(startupLoadingStatus)}</p>
+          <div class="loading-bar is-measured" aria-hidden="true"><span></span></div>
+        </section>
+      </main>
+    `;
+  }
+
   function render() {
     syncViewportLayoutVars();
     syncBgm();
+
+    if (view === "startup-loading") {
+      renderStartupLoading();
+      return;
+    }
 
     if (view === "intro") {
       renderIntro();
@@ -3421,7 +3573,7 @@ ${history}
     switch (action) {
       case "start":
         closeStartSlots({ immediate: true, render: false });
-        beginStartTransition(() => startNewRun());
+        beginStartTransition(() => beginStartupLoading(() => startNewRun()));
         return;
       case "advance-intro":
         advanceIntro();

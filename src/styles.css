@@ -3020,6 +3020,13 @@ button.ending-tile:focus-visible {
   animation: loading-fill var(--loading-duration, 2000ms) linear both;
 }
 
+.loading-bar.is-measured span {
+  width: var(--loading-progress, 8%);
+  transform: none;
+  animation: none;
+  transition: width 260ms ease;
+}
+
 .ending-screen {
   width: 100vw;
   height: 100dvh;
