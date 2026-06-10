@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Age of exploration compass logo">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="64" cy="64" r="47" fill="#f4d27a" stroke="#2a1b0d" stroke-width="8"/>
+    <circle cx="64" cy="64" r="35" stroke="#7a4e13" stroke-width="5"/>
+    <circle cx="64" cy="64" r="22" stroke="#2a1b0d" stroke-width="3" opacity=".72"/>
+    <path d="M64 10l11 42 42 12-42 11-11 43-12-43-42-11 42-12z" fill="#f8e7a8" stroke="#2a1b0d" stroke-width="7"/>
+    <path d="M64 26l6 30 30 8-30 7-6 31-8-31-30-7 30-8z" fill="#c58b2a" stroke="#2a1b0d" stroke-width="5"/>
+    <path d="M64 43l4 17 17 4-17 4-4 17-4-17-17-4 17-4z" fill="#fff6d8" stroke="#2a1b0d" stroke-width="3"/>
+    <path d="M32 91c9-7 20-10 32-10s23 3 32 10" stroke="#2a1b0d" stroke-width="6"/>
+    <path d="M39 84l9-16 13 12" fill="#fff6d8" stroke="#2a1b0d" stroke-width="5"/>
+    <path d="M66 79l11-21 15 26" fill="#f2bf54" stroke="#2a1b0d" stroke-width="5"/>
+    <path d="M35 95h58" stroke="#2a1b0d" stroke-width="7"/>
+  </g>
+</svg>

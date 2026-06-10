@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Challenge logo candidate">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="32" r="24" fill="#f3dfb7" stroke="#241b10" stroke-width="4"/>
+    <circle cx="32" cy="32" r="16" stroke="#8d6420" stroke-width="3"/>
+    <path d="M32 11l5.5 15.5L53 32l-15.5 5.5L32 53l-5.5-15.5L11 32l15.5-5.5z" fill="#f8c84f" stroke="#241b10" stroke-width="3"/>
+    <path d="M32 19l3.1 9.9L45 32l-9.9 3.1L32 45l-3.1-9.9L19 32l9.9-3.1z" fill="#fff7df" stroke="#241b10" stroke-width="2"/>
+    <path d="M19 48h26" stroke="#241b10" stroke-width="4"/>
+    <path d="M23 53h18" stroke="#8d6420" stroke-width="3"/>
+  </g>
+</svg>

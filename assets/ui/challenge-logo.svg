@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Challenge logo">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="32" r="24" fill="#f7c84f" stroke="#3b2b10" stroke-width="4"/>
+    <path d="M32 8v48M8 32h48" stroke="#3b2b10" stroke-width="3" opacity=".42"/>
+    <path d="M32 13l7 19-7 19-7-19z" fill="#fff2a9" stroke="#3b2b10" stroke-width="3"/>
+    <path d="M13 32l19-7 19 7-19 7z" fill="#e2a92f" stroke="#3b2b10" stroke-width="3"/>
+    <path d="M18 46l28-28" stroke="#3b2b10" stroke-width="4"/>
+    <path d="M21 49l28-28" stroke="#fff2a9" stroke-width="2"/>
+    <circle cx="18" cy="46" r="5" fill="#fff2a9" stroke="#3b2b10" stroke-width="3"/>
+    <circle cx="46" cy="18" r="5" fill="#fff2a9" stroke="#3b2b10" stroke-width="3"/>
+  </g>
+</svg>
