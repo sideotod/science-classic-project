@@ -71,6 +71,8 @@
   const imageCache = new Map();
   let viewportLayoutFrame = 0;
 
+  const INITIAL_PRELOAD_IMAGE_KEYS = ["startHarbor", "harborStudy", "voyageLoading"];
+
   function clampNumber(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
@@ -561,17 +563,38 @@
     );
   }
 
-  function preloadImage(src) {
+  function scheduleIdleTask(callback, timeout = 1500) {
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(callback, { timeout });
+      return;
+    }
+    window.setTimeout(callback, Math.min(timeout, 900));
+  }
+
+  function preloadImage(src, priority = "auto") {
     if (!src || imageCache.has(src) || typeof Image === "undefined") return;
     const image = new Image();
     image.decoding = "async";
+    image.fetchPriority = priority;
     image.src = src;
     imageCache.set(src, image);
     image.decode?.().catch(() => {});
   }
 
   function preloadImages() {
-    Object.values(DATA.images || {}).forEach(preloadImage);
+    const initialSources = INITIAL_PRELOAD_IMAGE_KEYS.map((key) => DATA.images?.[key]).filter(Boolean);
+    initialSources.forEach((src) => preloadImage(src, "high"));
+
+    const queuedSources = Object.values(DATA.images || {}).filter((src) => src && !initialSources.includes(src));
+    let index = 0;
+    const preloadNext = () => {
+      const src = queuedSources[index];
+      index += 1;
+      if (!src) return;
+      preloadImage(src);
+      scheduleIdleTask(preloadNext, 1800);
+    };
+    scheduleIdleTask(preloadNext, 2200);
   }
 
   function preloadSceneAssets(scene) {
@@ -2718,7 +2741,7 @@ ${history}
     app.innerHTML = `
       <main class="vn-shell tutorial-shell" data-action="advance-tutorial">
         <section class="vn-stage tutorial-stage">
-          <img class="vn-bg" src="${backgroundImage}" alt="${escapeHtml(scene.title)} 배경" loading="eager" decoding="sync" fetchpriority="high">
+          <img class="vn-bg" src="${backgroundImage}" alt="${escapeHtml(scene.title)} 배경" loading="eager" decoding="async" fetchpriority="high">
           <div class="tutorial-vignette"></div>
           <header class="vn-topbar tutorial-topbar">
             <div class="tutorial-target tutorial-meta-target${highlight("meta")}">
@@ -2916,7 +2939,7 @@ ${history}
     app.innerHTML = `
       <main class="vn-shell">
         <section class="vn-stage ${sceneClass} ${showAgentChat ? "agent-stage" : ""} ${suppressCharacterFade ? "no-character-fade" : ""}">
-          <img class="vn-bg" src="${backgroundImage}" alt="${escapeHtml(scene.title)} 배경" loading="eager" decoding="sync" fetchpriority="high">
+          <img class="vn-bg" src="${backgroundImage}" alt="${escapeHtml(scene.title)} 배경" loading="eager" decoding="async" fetchpriority="high">
           <div class="vn-vignette"></div>
           <header class="vn-topbar">
             <div>
