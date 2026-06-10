@@ -563,14 +563,6 @@
     );
   }
 
-  function scheduleIdleTask(callback, timeout = 1500) {
-    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-      window.requestIdleCallback(callback, { timeout });
-      return;
-    }
-    window.setTimeout(callback, Math.min(timeout, 900));
-  }
-
   function preloadImage(src, priority = "auto") {
     if (!src || imageCache.has(src) || typeof Image === "undefined") return;
     const image = new Image();
@@ -584,17 +576,6 @@
   function preloadImages() {
     const initialSources = INITIAL_PRELOAD_IMAGE_KEYS.map((key) => DATA.images?.[key]).filter(Boolean);
     initialSources.forEach((src) => preloadImage(src, "high"));
-
-    const queuedSources = Object.values(DATA.images || {}).filter((src) => src && !initialSources.includes(src));
-    let index = 0;
-    const preloadNext = () => {
-      const src = queuedSources[index];
-      index += 1;
-      if (!src) return;
-      preloadImage(src);
-      scheduleIdleTask(preloadNext, 1800);
-    };
-    scheduleIdleTask(preloadNext, 2200);
   }
 
   function preloadSceneAssets(scene) {
