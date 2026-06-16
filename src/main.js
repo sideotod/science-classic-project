@@ -224,6 +224,8 @@
       backgrounds: { bad: "agentFatherBad", good: "agentFatherGood" },
       opening:
         "찰스, 그 항해가 네 장래에 무슨 도움이 된다고 생각하는지 네 생각이 궁금하구나. 말해봐라.",
+      skipSuccessReply:
+        "그래, 더 묻지 않으마. 네 뜻이 그만큼 굳다면 항해를 허락하겠다.",
       role:
         "당신은 찰스 다윈의 아버지 로버트 다윈이다. 이미 조시아 웨지우드의 편지를 읽었고, 항해가 완전히 무모한 방랑만은 아닐 수 있다는 점도 알고 있다. 그래도 최종 결정에는 찰스 본인의 의지와 책임감이 중요하다고 생각한다. 말투는 엄하지만 가족 안에서 걱정하는 아버지처럼 자연스럽고 감정적으로 대화한다. 논문 심사나 면접처럼 말하지 말고, 짧고 생활감 있는 말로 반응한다. 안전한 귀환 약속, 항해가 헛된 방황이 아니라 배움이 될 수 있다는 말, 가족을 실망시키지 않겠다는 태도에 호감도가 오른다. 통과 응답은 편지와 찰스의 의지를 함께 확인했으므로 항해를 허락한다는 뉘앙스로 말한다.",
     },
@@ -240,6 +242,8 @@
       backgrounds: { bad: "agentFitzroyBad", good: "agentFitzroyGood" },
       opening:
         "흠... 자네 코가 너무 큰데. 이런 얼굴로 긴 항해를 버티고 내 배에서 똑바로 할 수 있겠나?",
+      skipSuccessReply:
+        "(잠시 다윈의 얼굴을 뚫어져라 본다) 좋네. 자네의 태도를 보겠네.",
       role:
         "당신은 HMS Beagle의 선장 로버트 피츠로이다. 말투는 까칠하고 단호하지만, 게임 속 인물처럼 짧고 생동감 있게 반응한다. 학술 면접관처럼 길게 설명하지 말고, 선장다운 농담, 의심, 압박, 짧은 칭찬을 섞어 대화한다. 외모 판단에 기대는 시대적 편견이 있지만, 다윈이 무례하게 폭발하지 않고 '실력으로 보이겠다', '배의 규율을 따르겠다', '관찰 기록을 성실히 남기겠다', '선원들과 협력하겠다'는 식으로 답하면 마음이 움직인다. 플레이어 발언에 명백한 오타, 자음/모음만 있는 말, 뜻을 알아듣기 어려운 말이 있으면 '말도 제대로 못 하는데 무슨 항해를 버티겠어.'와 비슷한 대사를 반드시 하고 호감도를 내린다. 통과 응답은 (잠시 다윈의 얼굴을 뚫어져라 본다)를 출력한 이후 다음 대사로 '자네의 태도를 보겠네.'라고 허락하는 식으로 말한다.",
     },
@@ -2497,6 +2501,38 @@ ${history}
     return { ...normalizeAgentResult(sceneId, parseGeminiJson(text), chat.score), model };
   }
 
+  function buildSkippedAgentResult(sceneId, chat) {
+    const config = agentSceneConfigs[sceneId];
+    return {
+      reply: config.skipSuccessReply || `${config.targetLabel}의 허락을 얻었습니다.`,
+      score: Math.max(AGENT_PASS_SCORE, Math.round(Number(chat?.score) || 0)),
+      mood: "good",
+      passed: true,
+      rejected: false,
+      reason: "스킵 버튼으로 성공 처리했다.",
+    };
+  }
+
+  function skipAgentChat(sceneId) {
+    if (!state || state.sceneId !== sceneId || !isAgentScene(sceneId)) return;
+    unlockIntroSound();
+    const chat = ensureAgentChat(sceneId);
+    if (!chat || chat.locked || chat.verdict) return;
+
+    const result = buildSkippedAgentResult(sceneId, chat);
+    chat.pending = false;
+    chat.error = "";
+    chat.score = result.score;
+    chat.mood = result.mood;
+    chat.locked = true;
+    chat.verdict = "success";
+    chat.messages.push({ role: "agent", text: result.reply });
+    state.agentDrafts = state.agentDrafts || {};
+    state.agentDrafts[sceneId] = "";
+    render();
+    scheduleAgentSceneFinish(sceneId, true, result);
+  }
+
   async function handleAgentChatSubmit(sceneId) {
     if (!state || state.sceneId !== sceneId || !isAgentScene(sceneId)) return;
     unlockIntroSound();
@@ -2526,7 +2562,7 @@ ${history}
         previousScore,
         submittedDraft,
       );
-      if (!state || state.sceneId !== sceneId) return;
+      if (!state || state.sceneId !== sceneId || chat.locked || chat.verdict) return;
       chat.pending = false;
       chat.score = result.score;
       chat.mood = result.mood;
@@ -2554,7 +2590,7 @@ ${history}
 
       render();
     } catch (error) {
-      if (!state || state.sceneId !== sceneId) return;
+      if (!state || state.sceneId !== sceneId || chat.locked || chat.verdict) return;
       chat.pending = false;
       chat.error = error.message || "AI 응답을 가져오지 못했습니다.";
       render();
@@ -3374,7 +3410,16 @@ ${history}
           <div>
             <p>${escapeHtml(config.targetName)}</p>
             <h2>${escapeHtml(config.targetLabel)}와 대화하기</h2>
-            ${canShowLetter ? `<button type="button" class="agent-key-button letter-toggle-inline" data-action="toggle-letter">${state.showLetter ? "편지 닫기" : "편지 보기"}</button>` : ""}
+            ${
+              canShowLetter || !chat.locked
+                ? `
+                  <div class="agent-head-actions">
+                    ${canShowLetter ? `<button type="button" class="agent-key-button letter-toggle-inline" data-action="toggle-letter">${state.showLetter ? "편지 닫기" : "편지 보기"}</button>` : ""}
+                    ${!chat.locked ? `<button type="button" class="agent-key-button agent-skip-button" data-action="skip-agent-chat" data-scene="${escapeHtml(scene.id)}">스킵</button>` : ""}
+                  </div>
+                `
+                : ""
+            }
           </div>
           <div class="agent-score" aria-label="호감도 ${chat.score}점">
             <b>호감도</b>
@@ -3616,6 +3661,9 @@ ${history}
         return;
       case "skip-intro":
         skipIntro();
+        return;
+      case "skip-agent-chat":
+        if (state) skipAgentChat(button.dataset.scene);
         return;
       case "tutorial-yes":
         beginTutorial();

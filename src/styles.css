@@ -2494,8 +2494,21 @@ button.ending-tile:focus-visible {
   font-weight: 900;
 }
 
-.letter-toggle-inline {
+.agent-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 8px;
+}
+
+.letter-toggle-inline {
+  margin-top: 0;
+}
+
+.agent-skip-button {
+  border-color: rgba(255, 238, 185, 0.7);
+  color: #2a2118;
+  background: #ffe7ab;
 }
 
 .letter-backdrop {
