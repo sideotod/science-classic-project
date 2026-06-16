@@ -1,4 +1,4 @@
-const DEFAULT_MODEL = "gemini-2.0-flash-lite";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 const MIN_REQUEST_INTERVAL_MS = 6000;
 const lastRequestAtByClient = new Map();
 

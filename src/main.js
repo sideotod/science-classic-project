@@ -4,7 +4,7 @@
   const SAVE_SLOT_COUNT = 5;
   const GALLERY_KEY = "beagle-darwin-endings-v1";
   const GAME_SESSION_STORAGE = "beagle-game-session-id-v1";
-  const GEMINI_MODEL = "gemini-2.0-flash-lite";
+  const GEMINI_MODEL = "gemini-2.5-flash";
   const GEMINI_FALLBACK_MODELS = [];
   const AGENT_VERDICT_DELAY_MS = 3200;
   const CHALLENGE_INTRO_MS = 2200;
