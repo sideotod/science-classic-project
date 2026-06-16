@@ -4,9 +4,9 @@
   const SAVE_SLOT_COUNT = 5;
   const GALLERY_KEY = "beagle-darwin-endings-v1";
   const GAME_SESSION_STORAGE = "beagle-game-session-id-v1";
+  const DEMO_UNLOCKED_AT = "demo";
   const UNLOCK_ALL_ENDINGS_BY_DEFAULT = true;
   const GEMINI_MODEL = "gemini-2.5-flash";
-  const GEMINI_FALLBACK_MODELS = [];
   const AGENT_VERDICT_DELAY_MS = 3200;
   const CHALLENGE_INTRO_MS = 2200;
   const CHALLENGE_COMPLETE_MS = 2500;
@@ -829,22 +829,25 @@
 
   function getUnlockedEndings() {
     const defaultUnlocked = UNLOCK_ALL_ENDINGS_BY_DEFAULT ? getDefaultUnlockedEndings() : {};
-    try {
-      const savedUnlocked = JSON.parse(localStorage.getItem(GALLERY_KEY) || "{}");
-      return { ...defaultUnlocked, ...sanitizeUnlockedEndings(savedUnlocked) };
-    } catch {
-      return defaultUnlocked;
-    }
+    return { ...defaultUnlocked, ...getStoredUnlockedEndings() };
   }
 
   function getDefaultUnlockedEndings() {
     return getGalleryEndings().reduce((unlocked, [endingId, ending]) => {
       unlocked[endingId] = {
-        unlockedAt: "demo",
+        unlockedAt: DEMO_UNLOCKED_AT,
         title: ending.title || endingId,
       };
       return unlocked;
     }, {});
+  }
+
+  function getStoredUnlockedEndings() {
+    try {
+      return sanitizeUnlockedEndings(JSON.parse(localStorage.getItem(GALLERY_KEY) || "{}"));
+    } catch {
+      return {};
+    }
   }
 
   function sanitizeUnlockedEndings(unlocked) {
@@ -855,7 +858,7 @@
   }
 
   function unlockEnding(endingId) {
-    const unlocked = getUnlockedEndings();
+    const unlocked = getStoredUnlockedEndings();
     unlocked[endingId] = {
       unlockedAt: new Date().toISOString(),
       title: DATA.endings[endingId]?.title || endingId,
@@ -2422,10 +2425,6 @@ ${history}
     };
   }
 
-  function getGeminiModels() {
-    return [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(Boolean))];
-  }
-
   function getGameSessionId() {
     try {
       let sessionId = sessionStorage.getItem(GAME_SESSION_STORAGE);
@@ -2474,7 +2473,6 @@ ${history}
         "X-Game-Session": getGameSessionId(),
       },
       body: JSON.stringify({
-        models: getGeminiModels(),
         body,
       }),
     });

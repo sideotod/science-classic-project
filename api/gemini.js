@@ -1,4 +1,4 @@
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const MIN_REQUEST_INTERVAL_MS = 6000;
 const lastRequestAtByClient = new Map();
 
@@ -8,11 +8,6 @@ function getRequestBody(req) {
     return JSON.parse(req.body);
   }
   return {};
-}
-
-function selectModel(models) {
-  const requested = Array.isArray(models) ? models : [];
-  return requested.map((model) => String(model || "").trim()).find(Boolean) || DEFAULT_MODEL;
 }
 
 async function requestGeminiModel(model, apiKey, body) {
@@ -94,10 +89,9 @@ module.exports = async function handler(req, res) {
     return sendJson(res, 400, { error: "AI 요청 본문이 올바르지 않습니다." });
   }
 
-  const model = selectModel(payload.models);
   try {
-    const text = await requestGeminiModel(model, apiKey, body);
-    return sendJson(res, 200, { model, text });
+    const text = await requestGeminiModel(GEMINI_MODEL, apiKey, body);
+    return sendJson(res, 200, { model: GEMINI_MODEL, text });
   } catch (error) {
     const status = error.status || 500;
     const message =
@@ -106,6 +100,6 @@ module.exports = async function handler(req, res) {
         : status === 503
           ? "AI 모델이 일시적으로 혼잡합니다. 잠시 후 다시 시도해 주세요."
           : error.message || "AI 응답을 가져오지 못했습니다.";
-    return sendJson(res, status, { error: message, model });
+    return sendJson(res, status, { error: message, model: GEMINI_MODEL });
   }
 };
