@@ -4,6 +4,7 @@
   const SAVE_SLOT_COUNT = 5;
   const GALLERY_KEY = "beagle-darwin-endings-v1";
   const GAME_SESSION_STORAGE = "beagle-game-session-id-v1";
+  const UNLOCK_ALL_ENDINGS_BY_DEFAULT = true;
   const GEMINI_MODEL = "gemini-2.5-flash";
   const GEMINI_FALLBACK_MODELS = [];
   const AGENT_VERDICT_DELAY_MS = 3200;
@@ -827,11 +828,30 @@
   }
 
   function getUnlockedEndings() {
+    const defaultUnlocked = UNLOCK_ALL_ENDINGS_BY_DEFAULT ? getDefaultUnlockedEndings() : {};
     try {
-      return JSON.parse(localStorage.getItem(GALLERY_KEY) || "{}");
+      const savedUnlocked = JSON.parse(localStorage.getItem(GALLERY_KEY) || "{}");
+      return { ...defaultUnlocked, ...sanitizeUnlockedEndings(savedUnlocked) };
     } catch {
-      return {};
+      return defaultUnlocked;
     }
+  }
+
+  function getDefaultUnlockedEndings() {
+    return getGalleryEndings().reduce((unlocked, [endingId, ending]) => {
+      unlocked[endingId] = {
+        unlockedAt: "demo",
+        title: ending.title || endingId,
+      };
+      return unlocked;
+    }, {});
+  }
+
+  function sanitizeUnlockedEndings(unlocked) {
+    if (!unlocked || typeof unlocked !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(unlocked).filter(([endingId, value]) => DATA.endings[endingId] && value && typeof value === "object"),
+    );
   }
 
   function unlockEnding(endingId) {
